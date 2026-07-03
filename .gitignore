@@ -32,9 +32,16 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
+
+# uploads (dev local storage — real deployment usa S3-compatible o lo que defina sistemas de APN)
+/uploads
+
+# prisma generated client
+/lib/generated
 
 # typescript
 *.tsbuildinfo

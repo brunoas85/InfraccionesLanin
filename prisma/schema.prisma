@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Rol {
+  MESA_DE_ENTRADAS
+  RESPONSABLE_AREA
+  ADMIN
+}
+
+enum Reparticion {
+  DGA_APNAC
+  DGAJ_APNAC
+  DC_APNAC
+  OTRA
+}
+
+enum Origen {
+  GDE
+  TAD
+}
+
+enum EstadoCaso {
+  CARGADO
+  EN_EVALUACION
+  CON_DESCARGO
+  RESUELTO
+  CON_ORDEN_DE_PAGO
+  PAGADO
+}
+
+enum ResultadoDisposicion {
+  SANCIONADO
+  ARCHIVADO
+  SOBRESEIDO
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  nombre       String
+  rol          Rol
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  casosCreados     Caso[]            @relation("CasoCreadoPor")
+  historialEventos HistorialEvento[]
+
+  @@map("users")
+}
+
+model TipoInfraccion {
+  id        String   @id @default(cuid())
+  nombre    String
+  montoMin  Decimal  @db.Decimal(12, 2)
+  montoMax  Decimal  @db.Decimal(12, 2)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  casos Caso[]
+
+  @@map("tipos_infraccion")
+}
+
+model Caso {
+  id     String @id @default(cuid())
+  numeroEE       String      @unique
+  reparticion    Reparticion
+  reparticionOtra String?
+  origen         Origen
+
+  infractorNombre String
+  infractorDni    String?
+
+  tipoInfraccionId String
+  tipoInfraccion   TipoInfraccion @relation(fields: [tipoInfraccionId], references: [id])
+
+  fechaInfraccion     DateTime
+  fechaRecepcionEE    DateTime
+  sector              String
+  guardaparqueInterviniente String
+  jefeGuardaparques   String
+  descripcion         String?
+
+  estado EstadoCaso @default(CARGADO)
+
+  createdById String
+  createdBy   User   @relation("CasoCreadoPor", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  adjuntos         Adjunto[]
+  descargo         Descargo?
+  disposicion      Disposicion?
+  ordenPago        OrdenPago?
+  historialEventos HistorialEvento[]
+
+  @@map("casos")
+}
+
+model Adjunto {
+  id         String   @id @default(cuid())
+  casoId     String
+  caso       Caso     @relation(fields: [casoId], references: [id])
+  nombreArchivo String
+  rutaArchivo   String
+  tipo          String
+  createdAt  DateTime @default(now())
+
+  @@map("adjuntos")
+}
+
+model Descargo {
+  id                String   @id @default(cuid())
+  casoId            String   @unique
+  caso              Caso     @relation(fields: [casoId], references: [id])
+  fechaPresentacion DateTime
+  rutaAdjunto       String
+  createdAt         DateTime @default(now())
+
+  @@map("descargos")
+}
+
+model Disposicion {
+  id        String                @id @default(cuid())
+  casoId    String                @unique
+  caso      Caso                  @relation(fields: [casoId], references: [id])
+  numero    String
+  resultado ResultadoDisposicion
+  monto     Decimal?              @db.Decimal(12, 2)
+  fecha     DateTime              @default(now())
+
+  @@map("disposiciones")
+}
+
+model OrdenPago {
+  id                 String    @id @default(cuid())
+  casoId             String    @unique
+  caso               Caso      @relation(fields: [casoId], references: [id])
+  pdfUrl             String
+  codigoReferencia   String    @unique
+  pagado             Boolean   @default(false)
+  comprobanteUrl     String?
+  fechaConciliacion  DateTime?
+  conciliadoPor      String?
+  createdAt          DateTime  @default(now())
+
+  @@map("ordenes_pago")
+}
+
+model HistorialEvento {
+  id        String   @id @default(cuid())
+  casoId    String
+  caso      Caso     @relation(fields: [casoId], references: [id])
+  tipo      String
+  detalle   String?
+  usuarioId String
+  usuario   User     @relation(fields: [usuarioId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@map("historial_eventos")
+}
