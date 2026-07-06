@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { verifySession } from '@/lib/dal'
 import { logout } from '@/app/actions/auth'
+import { BackButton } from './back-button'
 
 const ROL_LABEL: Record<string, string> = {
   MESA_DE_ENTRADAS: 'Mesa de Entradas',
@@ -10,7 +11,10 @@ const ROL_LABEL: Record<string, string> = {
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await verifySession()
-  const puedeRegistrarEE = session.rol === 'MESA_DE_ENTRADAS' || session.rol === 'ADMIN'
+  const puedeRegistrarEE =
+    session.rol === 'MESA_DE_ENTRADAS' ||
+    session.rol === 'RESPONSABLE_AREA' ||
+    session.rol === 'ADMIN'
 
   return (
     <div className="flex min-h-full flex-col">
@@ -45,7 +49,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+        <BackButton />
+        {children}
+      </main>
     </div>
   )
 }

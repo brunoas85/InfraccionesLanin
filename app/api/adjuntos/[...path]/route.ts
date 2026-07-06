@@ -5,11 +5,12 @@ import { prisma } from '@/lib/prisma'
 
 type Params = Promise<{ path: string[] }>
 
-export async function GET(_request: Request, { params }: { params: Params }) {
+export async function GET(request: Request, { params }: { params: Params }) {
   await verifySession()
 
   const { path: pathSegments } = await params
   const rutaArchivo = `uploads/${pathSegments.join('/')}`
+  const descargar = new URL(request.url).searchParams.has('descargar')
 
   const adjunto = await prisma.adjunto.findFirst({ where: { rutaArchivo } })
   if (!adjunto) {
@@ -22,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: Params }) {
   return new Response(new Uint8Array(buffer), {
     headers: {
       'Content-Type': adjunto.tipo,
-      'Content-Disposition': `inline; filename="${encodeURIComponent(adjunto.nombreArchivo)}"`,
+      'Content-Disposition': `${descargar ? 'attachment' : 'inline'}; filename="${encodeURIComponent(adjunto.nombreArchivo)}"`,
     },
   })
 }

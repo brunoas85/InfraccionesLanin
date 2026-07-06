@@ -2,6 +2,7 @@ import 'dotenv/config'
 import bcrypt from 'bcryptjs'
 import { PrismaClient } from '../lib/generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
+import { TIPO_INFRACCION_OTROS_NOMBRE } from '../lib/tipos'
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter })
@@ -50,6 +51,7 @@ async function main() {
     { nombre: 'Extracción de flora o fauna nativa', montoMin: 100000, montoMax: 500000 },
     { nombre: 'Fogón fuera de zona habilitada', montoMin: 80000, montoMax: 300000 },
     { nombre: 'Ingreso de mascotas a zona restringida', montoMin: 15000, montoMax: 60000 },
+    { nombre: TIPO_INFRACCION_OTROS_NOMBRE, montoMin: 0, montoMax: 0 },
   ]
 
   for (const tipo of tiposInfraccion) {

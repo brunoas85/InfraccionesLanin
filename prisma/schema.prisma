@@ -40,6 +40,26 @@ enum ResultadoDisposicion {
   SOBRESEIDO
 }
 
+enum Ugd {
+  SUR
+  CENTRO
+  NORTE
+}
+
+enum TipoConsecuencia {
+  DECOMISO
+  APERCIBIMIENTO
+  MULTA
+}
+
+enum CategoriaAdjunto {
+  GENERAL
+  DESCARGO
+  RECURSO
+  ACTA
+  INFORME_ACTA
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -80,15 +100,18 @@ model Caso {
 
   tipoInfraccionId String
   tipoInfraccion   TipoInfraccion @relation(fields: [tipoInfraccionId], references: [id])
+  tipoInfraccionOtra String?
 
   fechaInfraccion     DateTime
   fechaRecepcionEE    DateTime
   sector              String
+  ugd                 Ugd
   guardaparqueInterviniente String
   jefeGuardaparques   String
   descripcion         String?
 
-  estado EstadoCaso @default(CARGADO)
+  huboDescargo Boolean    @default(false)
+  estado       EstadoCaso @default(CARGADO)
 
   createdById String
   createdBy   User   @relation("CasoCreadoPor", fields: [createdById], references: [id])
@@ -111,6 +134,7 @@ model Adjunto {
   nombreArchivo String
   rutaArchivo   String
   tipo          String
+  categoria     CategoriaAdjunto @default(GENERAL)
   createdAt  DateTime @default(now())
 
   @@map("adjuntos")
@@ -121,7 +145,6 @@ model Descargo {
   casoId            String   @unique
   caso              Caso     @relation(fields: [casoId], references: [id])
   fechaPresentacion DateTime
-  rutaAdjunto       String
   createdAt         DateTime @default(now())
 
   @@map("descargos")
@@ -134,6 +157,7 @@ model Disposicion {
   numero    String
   resultado ResultadoDisposicion
   monto     Decimal?              @db.Decimal(12, 2)
+  consecuencias TipoConsecuencia[] @default([])
   fecha     DateTime              @default(now())
 
   @@map("disposiciones")

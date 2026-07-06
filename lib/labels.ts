@@ -27,3 +27,29 @@ export const ORIGEN_LABEL: Record<string, string> = {
   GDE: 'GDE',
   TAD: 'TAD',
 }
+
+export const UGD_LABEL: Record<string, string> = {
+  SUR: 'Sur',
+  CENTRO: 'Centro',
+  NORTE: 'Norte',
+}
+
+export const TIPO_CONSECUENCIA_LABEL: Record<string, string> = {
+  DECOMISO: 'Decomiso',
+  APERCIBIMIENTO: 'Apercibimiento',
+  MULTA: 'Multa',
+}
+
+export const RESULTADO_DISPOSICION_LABEL: Record<string, string> = {
+  SANCIONADO: 'Sancionado',
+  ARCHIVADO: 'Archivado',
+  SOBRESEIDO: 'Sobreseído',
+}
+
+export const CATEGORIA_ADJUNTO_LABEL: Record<string, string> = {
+  GENERAL: 'Adjuntos de la carga inicial',
+  DESCARGO: 'Descargo',
+  RECURSO: 'Recurso',
+  ACTA: 'Acta',
+  INFORME_ACTA: 'Informe de Acta',
+}

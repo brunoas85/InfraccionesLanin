@@ -1,9 +1,10 @@
 import { requireRol } from '@/lib/dal'
 import { prisma } from '@/lib/prisma'
+import { TIPO_INFRACCION_OTROS_NOMBRE } from '@/lib/tipos'
 import { RegistrarEEForm } from './registrar-ee-form'
 
 export default async function NuevoCasoPage() {
-  await requireRol('MESA_DE_ENTRADAS', 'ADMIN')
+  await requireRol('MESA_DE_ENTRADAS', 'RESPONSABLE_AREA', 'ADMIN')
 
   const tipos = await prisma.tipoInfraccion.findMany({
     where: { activo: true },
@@ -19,6 +20,7 @@ export default async function NuevoCasoPage() {
 
       <RegistrarEEForm
         tipos={tipos.map((t) => ({ id: t.id, nombre: t.nombre }))}
+        otrosNombre={TIPO_INFRACCION_OTROS_NOMBRE}
       />
     </div>
   )

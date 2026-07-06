@@ -10,6 +10,12 @@ const REPARTICIONES = [
   { value: 'OTRA', label: 'Otra' },
 ] as const
 
+const UGDS = [
+  { value: 'SUR', label: 'Sur' },
+  { value: 'CENTRO', label: 'Centro' },
+  { value: 'NORTE', label: 'Norte' },
+] as const
+
 function Field({
   label,
   children,
@@ -31,10 +37,18 @@ function Field({
 const inputClass =
   'w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600'
 
-export function RegistrarEEForm({ tipos }: { tipos: { id: string; nombre: string }[] }) {
+export function RegistrarEEForm({
+  tipos,
+  otrosNombre,
+}: {
+  tipos: { id: string; nombre: string }[]
+  otrosNombre: string
+}) {
   const [state, action, pending] = useActionState(registrarEE, undefined)
   const [reparticion, setReparticion] = useState<string>('DGA_APNAC')
   const esOtra = reparticion === 'OTRA'
+  const [tipoInfraccionId, setTipoInfraccionId] = useState<string>('')
+  const esOtroTipo = tipos.find((t) => t.id === tipoInfraccionId)?.nombre === otrosNombre
 
   return (
     <form action={action} className="mt-6 space-y-4 rounded-lg border border-slate-200 bg-white p-6">
@@ -92,7 +106,13 @@ export function RegistrarEEForm({ tipos }: { tipos: { id: string; nombre: string
       </div>
 
       <Field label="Tipo de infracción" error={state?.fieldErrors?.tipoInfraccionId}>
-        <select name="tipoInfraccionId" className={inputClass} defaultValue="" required>
+        <select
+          name="tipoInfraccionId"
+          className={inputClass}
+          value={tipoInfraccionId}
+          onChange={(e) => setTipoInfraccionId(e.target.value)}
+          required
+        >
           <option value="" disabled>
             Seleccioná…
           </option>
@@ -104,6 +124,15 @@ export function RegistrarEEForm({ tipos }: { tipos: { id: string; nombre: string
         </select>
       </Field>
 
+      {esOtroTipo && (
+        <Field
+          label="Especificá el tipo de infracción"
+          error={state?.fieldErrors?.tipoInfraccionOtra}
+        >
+          <input name="tipoInfraccionOtra" className={inputClass} required />
+        </Field>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <Field label="Fecha de la infracción" error={state?.fieldErrors?.fechaInfraccion}>
           <input type="date" name="fechaInfraccion" className={inputClass} required />
@@ -113,9 +142,23 @@ export function RegistrarEEForm({ tipos }: { tipos: { id: string; nombre: string
         </Field>
       </div>
 
-      <Field label="Sector del parque" error={state?.fieldErrors?.sector}>
-        <input name="sector" className={inputClass} required />
-      </Field>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Sector del parque" error={state?.fieldErrors?.sector}>
+          <input name="sector" className={inputClass} required />
+        </Field>
+        <Field label="U.G.D." error={state?.fieldErrors?.ugd}>
+          <select name="ugd" className={inputClass} defaultValue="" required>
+            <option value="" disabled>
+              Seleccioná…
+            </option>
+            {UGDS.map((u) => (
+              <option key={u.value} value={u.value}>
+                {u.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
 
       <div className="grid grid-cols-2 gap-4">
         <Field

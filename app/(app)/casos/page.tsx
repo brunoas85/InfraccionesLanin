@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { verifySession } from '@/lib/dal'
 import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@/lib/generated/prisma/client'
-import { ESTADO_LABEL, ESTADO_COLOR, REPARTICION_LABEL, ORIGEN_LABEL } from '@/lib/labels'
+import { ESTADO_LABEL, ESTADO_COLOR, REPARTICION_LABEL, ORIGEN_LABEL, UGD_LABEL } from '@/lib/labels'
 import { formatFechaSolo } from '@/lib/dates'
 
 type SearchParams = Promise<{
@@ -10,10 +10,11 @@ type SearchParams = Promise<{
   estado?: string
   tipoInfraccionId?: string
   origen?: string
+  ugd?: string
   fechaInfraccionDesde?: string
   fechaInfraccionHasta?: string
-  fechaRecepcionDesde?: string
-  fechaRecepcionHasta?: string
+  montoDesde?: string
+  montoHasta?: string
 }>
 
 function dateRange(desde?: string, hasta?: string): Prisma.DateTimeFilter | undefined {
@@ -21,6 +22,14 @@ function dateRange(desde?: string, hasta?: string): Prisma.DateTimeFilter | unde
   const filter: Prisma.DateTimeFilter = {}
   if (desde) filter.gte = new Date(`${desde}T00:00:00.000Z`)
   if (hasta) filter.lte = new Date(`${hasta}T23:59:59.999Z`)
+  return filter
+}
+
+function montoRange(desde?: string, hasta?: string): Prisma.DecimalFilter | undefined {
+  if (!desde && !hasta) return undefined
+  const filter: Prisma.DecimalFilter = {}
+  if (desde) filter.gte = desde
+  if (hasta) filter.lte = hasta
   return filter
 }
 
@@ -34,6 +43,7 @@ export default async function CasosPage({ searchParams }: { searchParams: Search
     ...(params.estado ? { estado: params.estado as never } : {}),
     ...(params.tipoInfraccionId ? { tipoInfraccionId: params.tipoInfraccionId } : {}),
     ...(params.origen ? { origen: params.origen as never } : {}),
+    ...(params.ugd ? { ugd: params.ugd as never } : {}),
     ...(params.q
       ? {
           OR: [
@@ -49,12 +59,15 @@ export default async function CasosPage({ searchParams }: { searchParams: Search
   const fechaInfraccion = dateRange(params.fechaInfraccionDesde, params.fechaInfraccionHasta)
   if (fechaInfraccion) where.fechaInfraccion = fechaInfraccion
 
-  const fechaRecepcionEE = dateRange(params.fechaRecepcionDesde, params.fechaRecepcionHasta)
-  if (fechaRecepcionEE) where.fechaRecepcionEE = fechaRecepcionEE
+  const monto = montoRange(params.montoDesde, params.montoHasta)
+  if (monto) where.disposicion = { monto }
 
   const casos = await prisma.caso.findMany({
     where,
-    include: { tipoInfraccion: true },
+    include: {
+      tipoInfraccion: true,
+      adjuntos: { where: { categoria: 'ACTA' }, select: { id: true } },
+    },
     orderBy: { createdAt: 'desc' },
     take: 100,
   })
@@ -114,6 +127,18 @@ export default async function CasosPage({ searchParams }: { searchParams: Search
           </select>
         </div>
 
+        <div>
+          <label className="block text-xs font-medium text-slate-600">U.G.D.</label>
+          <select name="ugd" defaultValue={params.ugd ?? ''} className={inputClass}>
+            <option value="">Todas</option>
+            {Object.entries(UGD_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="col-span-2 grid grid-cols-2 gap-2 md:col-span-2">
           <div>
             <label className="block text-xs font-medium text-slate-600">
@@ -142,23 +167,25 @@ export default async function CasosPage({ searchParams }: { searchParams: Search
         <div className="col-span-2 grid grid-cols-2 gap-2 md:col-span-2">
           <div>
             <label className="block text-xs font-medium text-slate-600">
-              Recepción de EE — desde
+              ¿Qué multa se aplicó? — desde
             </label>
             <input
-              type="date"
-              name="fechaRecepcionDesde"
-              defaultValue={params.fechaRecepcionDesde}
+              type="number"
+              inputMode="decimal"
+              name="montoDesde"
+              defaultValue={params.montoDesde}
               className={inputClass}
             />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600">
-              Recepción de EE — hasta
+              ¿Qué multa se aplicó? — hasta
             </label>
             <input
-              type="date"
-              name="fechaRecepcionHasta"
-              defaultValue={params.fechaRecepcionHasta}
+              type="number"
+              inputMode="decimal"
+              name="montoHasta"
+              defaultValue={params.montoHasta}
               className={inputClass}
             />
           </div>
@@ -183,10 +210,13 @@ export default async function CasosPage({ searchParams }: { searchParams: Search
             <tr>
               <th className="px-4 py-2">N° de EE</th>
               <th className="px-4 py-2">Repartición</th>
+              <th className="px-4 py-2">U.G.D.</th>
               <th className="px-4 py-2">Infractor</th>
               <th className="px-4 py-2">Tipo de infracción</th>
               <th className="px-4 py-2">Fecha infracción</th>
               <th className="px-4 py-2">Recepción EE</th>
+              <th className="px-4 py-2">Descargo</th>
+              <th className="px-4 py-2">Acta</th>
               <th className="px-4 py-2">Estado</th>
             </tr>
           </thead>
@@ -201,13 +231,22 @@ export default async function CasosPage({ searchParams }: { searchParams: Search
                 <td className="px-4 py-2 text-slate-600">
                   {REPARTICION_LABEL[caso.reparticion]} · {ORIGEN_LABEL[caso.origen]}
                 </td>
+                <td className="px-4 py-2 text-slate-600">{UGD_LABEL[caso.ugd]}</td>
                 <td className="px-4 py-2 text-slate-600">{caso.infractorNombre}</td>
-                <td className="px-4 py-2 text-slate-600">{caso.tipoInfraccion.nombre}</td>
+                <td className="px-4 py-2 text-slate-600">
+                  {caso.tipoInfraccionOtra
+                    ? `${caso.tipoInfraccion.nombre} (${caso.tipoInfraccionOtra})`
+                    : caso.tipoInfraccion.nombre}
+                </td>
                 <td className="px-4 py-2 text-slate-600">
                   {formatFechaSolo(caso.fechaInfraccion)}
                 </td>
                 <td className="px-4 py-2 text-slate-600">
                   {formatFechaSolo(caso.fechaRecepcionEE)}
+                </td>
+                <td className="px-4 py-2 text-slate-600">{caso.huboDescargo ? 'Sí' : 'No'}</td>
+                <td className="px-4 py-2 text-slate-600">
+                  {caso.adjuntos.length > 0 ? 'Sí' : 'No'}
                 </td>
                 <td className="px-4 py-2">
                   <span
@@ -220,7 +259,7 @@ export default async function CasosPage({ searchParams }: { searchParams: Search
             ))}
             {casos.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
                   No se encontraron casos con los filtros aplicados.
                 </td>
               </tr>

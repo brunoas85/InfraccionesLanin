@@ -8,6 +8,33 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { requireRol } from '@/lib/dal'
 import { normalizeNumeroEE, isValidNumeroEEShape, origenDeReparticion } from '@/lib/ee'
+import { TIPO_INFRACCION_OTROS_NOMBRE } from '@/lib/tipos'
+import { CATEGORIA_ADJUNTO_LABEL } from '@/lib/labels'
+import type { CategoriaAdjunto } from '@/lib/generated/prisma/client'
+
+async function guardarAdjuntos(casoId: string, files: File[], categoria: CategoriaAdjunto) {
+  if (files.length === 0) return
+
+  const casoDir = path.join(process.cwd(), 'uploads', casoId)
+  await mkdir(casoDir, { recursive: true })
+
+  for (const file of files) {
+    const safeName = `${randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const filePath = path.join(casoDir, safeName)
+    const buffer = Buffer.from(await file.arrayBuffer())
+    await writeFile(filePath, buffer)
+
+    await prisma.adjunto.create({
+      data: {
+        casoId,
+        nombreArchivo: file.name,
+        rutaArchivo: `uploads/${casoId}/${safeName}`,
+        tipo: file.type || 'application/octet-stream',
+        categoria,
+      },
+    })
+  }
+}
 
 const CasoSchema = z
   .object({
@@ -20,9 +47,11 @@ const CasoSchema = z
     infractorNombre: z.string().trim().min(2, { error: 'Ingresá el nombre del infractor.' }),
     infractorDni: z.string().trim().optional(),
     tipoInfraccionId: z.string().min(1, { error: 'Seleccioná el tipo de infracción.' }),
+    tipoInfraccionOtra: z.string().trim().optional(),
     fechaInfraccion: z.coerce.date({ error: 'Ingresá una fecha de infracción válida.' }),
     fechaRecepcionEE: z.coerce.date({ error: 'Ingresá una fecha de recepción de EE válida.' }),
     sector: z.string().trim().min(2, { error: 'Ingresá el sector del parque.' }),
+    ugd: z.enum(['SUR', 'CENTRO', 'NORTE'], { error: 'Seleccioná la U.G.D.' }),
     guardaparqueInterviniente: z
       .string()
       .trim()
@@ -50,7 +79,7 @@ export type CasoState =
   | undefined
 
 export async function registrarEE(_state: CasoState, formData: FormData): Promise<CasoState> {
-  const session = await requireRol('MESA_DE_ENTRADAS', 'ADMIN')
+  const session = await requireRol('MESA_DE_ENTRADAS', 'RESPONSABLE_AREA', 'ADMIN')
 
   const validatedFields = CasoSchema.safeParse({
     numeroEE: formData.get('numeroEE'),
@@ -60,9 +89,11 @@ export async function registrarEE(_state: CasoState, formData: FormData): Promis
     infractorNombre: formData.get('infractorNombre'),
     infractorDni: formData.get('infractorDni') || undefined,
     tipoInfraccionId: formData.get('tipoInfraccionId'),
+    tipoInfraccionOtra: formData.get('tipoInfraccionOtra') || undefined,
     fechaInfraccion: formData.get('fechaInfraccion'),
     fechaRecepcionEE: formData.get('fechaRecepcionEE'),
     sector: formData.get('sector'),
+    ugd: formData.get('ugd'),
     guardaparqueInterviniente: formData.get('guardaparqueInterviniente'),
     jefeGuardaparques: formData.get('jefeGuardaparques'),
     descripcion: formData.get('descripcion') || undefined,
@@ -93,6 +124,23 @@ export async function registrarEE(_state: CasoState, formData: FormData): Promis
     }
   }
 
+  const tipoInfraccion = await prisma.tipoInfraccion.findUnique({
+    where: { id: data.tipoInfraccionId },
+  })
+  if (!tipoInfraccion) {
+    return {
+      error: 'El tipo de infracción seleccionado no es válido.',
+      fieldErrors: { tipoInfraccionId: ['Seleccioná un tipo de infracción válido.'] },
+    }
+  }
+  const esOtroTipo = tipoInfraccion.nombre === TIPO_INFRACCION_OTROS_NOMBRE
+  if (esOtroTipo && !data.tipoInfraccionOtra) {
+    return {
+      error: 'Especificá el tipo de infracción.',
+      fieldErrors: { tipoInfraccionOtra: ['Especificá el tipo de infracción.'] },
+    }
+  }
+
   const origen = data.reparticion === 'OTRA' ? data.origenManual! : origenDeReparticion(data.reparticion)!
 
   const adjuntos = formData
@@ -109,9 +157,11 @@ export async function registrarEE(_state: CasoState, formData: FormData): Promis
         infractorNombre: data.infractorNombre,
         infractorDni: data.infractorDni || null,
         tipoInfraccionId: data.tipoInfraccionId,
+        tipoInfraccionOtra: esOtroTipo ? data.tipoInfraccionOtra : null,
         fechaInfraccion: data.fechaInfraccion,
         fechaRecepcionEE: data.fechaRecepcionEE,
         sector: data.sector,
+        ugd: data.ugd,
         guardaparqueInterviniente: data.guardaparqueInterviniente,
         jefeGuardaparques: data.jefeGuardaparques,
         descripcion: data.descripcion || null,
@@ -131,26 +181,119 @@ export async function registrarEE(_state: CasoState, formData: FormData): Promis
     return nuevoCaso
   })
 
-  if (adjuntos.length > 0) {
-    const casoDir = path.join(process.cwd(), 'uploads', caso.id)
-    await mkdir(casoDir, { recursive: true })
+  await guardarAdjuntos(caso.id, adjuntos, 'GENERAL')
 
-    for (const file of adjuntos) {
-      const safeName = `${randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-      const filePath = path.join(casoDir, safeName)
-      const buffer = Buffer.from(await file.arrayBuffer())
-      await writeFile(filePath, buffer)
+  redirect(`/casos/${caso.id}`)
+}
 
-      await prisma.adjunto.create({
-        data: {
-          casoId: caso.id,
-          nombreArchivo: file.name,
-          rutaArchivo: `uploads/${caso.id}/${safeName}`,
-          tipo: file.type || 'application/octet-stream',
-        },
-      })
+const SubirDocumentoSchema = z.object({
+  casoId: z.string().min(1),
+  categoria: z.enum(['RECURSO', 'ACTA', 'INFORME_ACTA'], {
+    error: 'Seleccioná la categoría del documento.',
+  }),
+})
+
+export async function subirDocumento(_state: CasoState, formData: FormData): Promise<CasoState> {
+  const session = await requireRol('RESPONSABLE_AREA', 'ADMIN')
+
+  const validatedFields = SubirDocumentoSchema.safeParse({
+    casoId: formData.get('casoId'),
+    categoria: formData.get('categoria'),
+  })
+
+  if (!validatedFields.success) {
+    return {
+      error: 'Revisá los datos ingresados.',
+      fieldErrors: z.flattenError(validatedFields.error).fieldErrors,
     }
   }
 
-  redirect(`/casos/${caso.id}`)
+  const { casoId, categoria } = validatedFields.data
+
+  const caso = await prisma.caso.findUnique({ where: { id: casoId } })
+  if (!caso) {
+    return { error: 'El caso indicado no existe.' }
+  }
+
+  const archivos = formData
+    .getAll('archivos')
+    .filter((entry): entry is File => entry instanceof File && entry.size > 0)
+
+  if (archivos.length === 0) {
+    return { error: 'Adjuntá al menos un archivo.', fieldErrors: { archivos: ['Requerido.'] } }
+  }
+
+  await guardarAdjuntos(casoId, archivos, categoria)
+
+  await prisma.historialEvento.create({
+    data: {
+      casoId,
+      tipo: 'DOCUMENTO_CARGADO',
+      detalle: `Se cargó ${archivos.length === 1 ? 'un documento' : `${archivos.length} documentos`} en la categoría ${CATEGORIA_ADJUNTO_LABEL[categoria]}.`,
+      usuarioId: session.userId,
+    },
+  })
+
+  redirect(`/casos/${casoId}`)
+}
+
+const RegistrarDescargoSchema = z.object({
+  casoId: z.string().min(1),
+  fechaPresentacion: z.coerce.date({ error: 'Ingresá una fecha de presentación válida.' }),
+})
+
+export async function registrarDescargo(_state: CasoState, formData: FormData): Promise<CasoState> {
+  const session = await requireRol('RESPONSABLE_AREA', 'ADMIN')
+
+  const validatedFields = RegistrarDescargoSchema.safeParse({
+    casoId: formData.get('casoId'),
+    fechaPresentacion: formData.get('fechaPresentacion'),
+  })
+
+  if (!validatedFields.success) {
+    return {
+      error: 'Revisá los datos ingresados.',
+      fieldErrors: z.flattenError(validatedFields.error).fieldErrors,
+    }
+  }
+
+  const { casoId, fechaPresentacion } = validatedFields.data
+
+  const caso = await prisma.caso.findUnique({ where: { id: casoId } })
+  if (!caso) {
+    return { error: 'El caso indicado no existe.' }
+  }
+  if (['RESUELTO', 'CON_ORDEN_DE_PAGO', 'PAGADO'].includes(caso.estado)) {
+    return { error: 'No se puede registrar un descargo en un caso ya resuelto.' }
+  }
+
+  const archivos = formData
+    .getAll('archivos')
+    .filter((entry): entry is File => entry instanceof File && entry.size > 0)
+
+  await prisma.$transaction(async (tx) => {
+    await tx.descargo.upsert({
+      where: { casoId },
+      create: { casoId, fechaPresentacion },
+      update: { fechaPresentacion },
+    })
+
+    await tx.caso.update({
+      where: { id: casoId },
+      data: { huboDescargo: true, estado: 'CON_DESCARGO' },
+    })
+
+    await tx.historialEvento.create({
+      data: {
+        casoId,
+        tipo: 'DESCARGO_REGISTRADO',
+        detalle: `Descargo presentado el ${fechaPresentacion.toISOString().slice(0, 10)}.`,
+        usuarioId: session.userId,
+      },
+    })
+  })
+
+  await guardarAdjuntos(casoId, archivos, 'DESCARGO')
+
+  redirect(`/casos/${casoId}`)
 }
